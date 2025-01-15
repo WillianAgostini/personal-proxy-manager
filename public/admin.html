@@ -12,52 +12,99 @@
     <div class="container">
         <h1>Proxy Admin Panel</h1>
         <p>This host is linked to your browser only. Each browser can have a different proxy target configured.</p>
+
         <form id="update-form">
             <label for="targetHost">New proxy target:</label>
             <input type="url" id="targetHost" name="targetHost" placeholder="https://example.com" required>
+
+            <label>URL Mappings (up to 10 labels):</label>
+            <div id="mapping-container"></div>
+            <button type="button" id="add-mapping">Add Mapping</button>
+
             <button type="submit">Update</button>
         </form>
+
         <p id="status"></p>
     </div>
 
     <script>
+
+        function create_UUID() {
+            var dt = new Date().getTime();
+            var uuid = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+                var r = (dt + Math.random() * 16) % 16 | 0;
+                dt = Math.floor(dt / 16);
+                return (c == 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+            });
+            return uuid;
+        }
+
         document.addEventListener("DOMContentLoaded", async () => {
             const status = document.getElementById("status");
+            const mappingContainer = document.getElementById("mapping-container");
+            const addMappingButton = document.getElementById("add-mapping");
 
-            // Fetch and display the current proxy target from the cookie
+            let mappingCount = 0;
+
+            // Add a new mapping field
+            addMappingButton.addEventListener("click", () => {
+                if (mappingCount < 10) {
+                    const mappingId = `mapping-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+
+                    const labelDiv = document.createElement("div");
+                    labelDiv.classList.add("mapping-item");
+                    labelDiv.innerHTML = `
+                        <label for="${mappingId}">Mapping Label:</label>
+                        <input type="text" id="${mappingId}" name="mapping" placeholder="Source -> Target" required>
+                    `;
+
+                    mappingContainer.appendChild(labelDiv);
+                    mappingCount++;
+                } else {
+                    alert("You can only add up to 10 mappings.");
+                }
+            });
+
+            // Fetch and display the current proxy target and mappings
             try {
                 const response = await fetch('/current-target-host');
                 if (response.ok) {
                     const data = await response.json();
-                    status.textContent = `Current proxy target (linked to this browser): ${data.targetHost}`;
+                    status.textContent = `Current proxy target: ${data.targetHost}\nCurrent mappings: ${JSON.stringify(data.urlMapping)}`;
                     status.style.color = "blue";
                 }
             } catch (error) {
-                console.error("Failed to fetch current proxy target:", error);
+                console.error("Failed to fetch current proxy target and mappings:", error);
             }
 
-            // Handle form submission to update the proxy target
+            // Handle form submission to update the proxy target and mappings
             document.getElementById('update-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 const targetHost = document.getElementById('targetHost').value;
+                const mappings = Array.from(document.querySelectorAll('input[name="mapping"]')).reduce((acc, input) => {
+                    const url = input.value.trim();
+                    const uuid = create_UUID();
+                    acc[uuid] = url;
+                    return acc;
+                }, {});
 
                 try {
                     const updateResponse = await fetch('/current-target-host', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ targetHost }),
+                        body: JSON.stringify({ targetHost, urlMapping: mappings }),
                     });
 
                     const updateResult = await updateResponse.json();
                     if (updateResponse.ok) {
-                        status.textContent = `proxy target successfully updated to: ${updateResult.targetHost} (linked to this browser)`;
+                        status.textContent = `Proxy target updated to: ${updateResult.targetHost}\nMappings updated to: ${JSON.stringify(updateResult.urlMapping)}`;
                         status.style.color = "green";
                     } else {
                         status.textContent = `Error: ${updateResult.message}`;
                         status.style.color = "red";
                     }
                 } catch (error) {
-                    status.textContent = `Failed to update proxy target: ${error.message}`;
+                    status.textContent = `Failed to update proxy target and mappings: ${error.message}`;
                     status.style.color = "red";
                 }
             });
