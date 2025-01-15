@@ -37,13 +37,13 @@ app.post("/current-target-host", (req, res) => {
     try {
         res.cookie("proxy_urlMapping", JSON.stringify(urlMapping), { httpOnly: false });
         res.cookie("proxy_host", targetHost, { httpOnly: false });
-        res.status(200).json({
+        return res.status(200).json({
             message: "TARGET_HOST and mappings successfully updated.",
             targetHost,
             urlMapping,
         });
     } catch (error) {
-        res.status(500).json({
+        return res.status(500).json({
             message: "An error occurred while updating the settings.",
             error: error.message,
         });
@@ -66,9 +66,11 @@ app.use(async (req, res) => {
             headers: { ...req.headers, Host: hostname },
         });
 
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        if (!response.ok) {
+            res.writeHead(response.status, response.headers);
+            return res.end(`HTTP error! status: ${response.status}`);
+        }
 
-        const contentType = response.headers.get('content-type');
         res.writeHead(response.status, response.headers);
 
         for await (const chunk of response.body) {
@@ -82,7 +84,9 @@ app.use(async (req, res) => {
         res.end();
     } catch (error) {
         console.error("Proxy error:", error.message);
-        res.status(500).send("Internal proxy server error.");
+        if (!res.headersSent) {
+            res.status(500).send("Internal proxy server error.");
+        }
     }
 });
 
